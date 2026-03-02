@@ -54,6 +54,13 @@ This app combines multiple sophisticated features: Web Bluetooth API integration
 - Progression: Open heatmap view → Load all location history data → Calculate density distribution → Render color-gradient heatmap layer → Adjust radius/blur/intensity controls → Toggle between all devices or single device view
 - Success criteria: Heatmap accurately reflects detection frequency with blue (low) to red (high) gradient, controls update visualization in real-time, performance remains smooth with hundreds of data points
 
+**Predictive Analysis & Pattern Recognition**
+- Functionality: AI-powered predictive analysis that learns from historical detection patterns to forecast when and where devices are likely to be detected next
+- Purpose: Help users anticipate device availability, understand usage patterns, and proactively locate devices based on learned routines
+- Trigger: User switches to Predictions view tab
+- Progression: Open predictions view → Analyze location history data → Detect temporal patterns (daily/weekday/weekend/irregular) → Cluster frequent locations → Calculate confidence scores → Display predicted next detection time with reasoning → Show top 5 likely detection times per day/week → Display primary/secondary/tertiary location hotspots → Provide pattern confidence metrics
+- Success criteria: Predictions display with confidence scores above 40%, pattern detection works with minimum 3 historical data points per device, next detection timestamp is accurate within the predicted time window, location clusters properly group nearby coordinates, pattern labels correctly identify daily/weekday/weekend/irregular routines
+
 ## Edge Case Handling
 
 - **Bluetooth Permission Denied** - Show clear message explaining Web Bluetooth requirements with retry button
@@ -144,6 +151,11 @@ Animations should feel precise and purposeful - subtle scanning pulses, smooth t
   - ChartBar (statistics view)
   - Trophy (top devices)
   - TrendUp (statistics metrics)
+  - Lightning (predictions/AI analysis)
+  - Brain (pattern recognition)
+  - Target (prediction accuracy)
+  - Calendar (time-based predictions)
+  - Warning (low confidence alerts)
   
 - **Spacing**: 
   - Page padding: p-6 (24px)

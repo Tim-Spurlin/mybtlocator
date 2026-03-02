@@ -7,12 +7,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Bluetooth, MapTrifold, Disc, Pencil, Trash, ClockCounterClockwise, ChartBar, Flame } from '@phosphor-icons/react';
+import { Bluetooth, MapTrifold, Disc, Pencil, Trash, ClockCounterClockwise, ChartBar, Flame, Lightning } from '@phosphor-icons/react';
 import { DeviceCard } from '@/components/DeviceCard';
 import { HistoryTimeline } from '@/components/HistoryTimeline';
 import { HistoryFilters, type HistoryFilterState } from '@/components/HistoryFilters';
 import { StatisticsView } from '@/components/StatisticsView';
 import { HeatmapView } from '@/components/HeatmapView';
+import { PredictiveAnalysis } from '@/components/PredictiveAnalysis';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import { toast } from 'sonner';
 import type { DeviceProfile, LocationHistoryEntry } from '@/lib/types';
@@ -276,7 +277,7 @@ function App() {
           </header>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full max-w-4xl grid-cols-6 mx-auto">
+            <TabsList className="grid w-full max-w-5xl grid-cols-7 mx-auto">
               <TabsTrigger value="devices" className="gap-2">
                 <Bluetooth className="w-4 h-4" weight="fill" />
                 Devices
@@ -300,6 +301,10 @@ function App() {
               <TabsTrigger value="statistics" className="gap-2">
                 <ChartBar className="w-4 h-4" weight="fill" />
                 Statistics
+              </TabsTrigger>
+              <TabsTrigger value="predictions" className="gap-2">
+                <Lightning className="w-4 h-4" weight="fill" />
+                Predictions
               </TabsTrigger>
             </TabsList>
 
@@ -535,6 +540,10 @@ function App() {
 
             <TabsContent value="statistics" className="space-y-4">
               <StatisticsView devices={devices || []} />
+            </TabsContent>
+
+            <TabsContent value="predictions" className="space-y-4">
+              <PredictiveAnalysis devices={devices || []} />
             </TabsContent>
           </Tabs>
         </div>
