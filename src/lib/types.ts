@@ -6,6 +6,18 @@ export interface LocationHistoryEntry {
   accuracy?: number;
 }
 
+export interface PredictionRecord {
+  id: string;
+  deviceId: string;
+  predictedTimestamp: number;
+  confidence: number;
+  reason: string;
+  createdAt: number;
+  actualTimestamp?: number;
+  wasAccurate?: boolean;
+  timeErrorMinutes?: number;
+}
+
 export interface DeviceProfile {
   id: string;
   macAddress: string;
@@ -20,6 +32,7 @@ export interface DeviceProfile {
   rssi: number | null;
   isNearby: boolean;
   locationHistory?: LocationHistoryEntry[];
+  predictionRecords?: PredictionRecord[];
 }
 
 export interface ScanResult {

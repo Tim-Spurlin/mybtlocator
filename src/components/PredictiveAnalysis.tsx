@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,14 +16,18 @@ import {
   Target,
   Warning,
   Sliders,
-  ChartLine
+  ChartLine,
+  CheckCircle,
+  XCircle,
+  MinusCircle
 } from '@phosphor-icons/react';
-import type { DeviceProfile, LocationHistoryEntry } from '@/lib/types';
+import type { DeviceProfile, LocationHistoryEntry, PredictionRecord } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart, BarChart, Bar, Cell } from 'recharts';
 
 interface PredictiveAnalysisProps {
   devices: DeviceProfile[];
+  onSavePredictions?: (predictions: Map<string, PredictionRecord>) => void;
 }
 
 interface DevicePrediction {
@@ -364,8 +368,77 @@ function calculateConfidenceTrend(devices: DeviceProfile[]): ConfidenceTrendPoin
   return trendPoints;
 }
 
-export function PredictiveAnalysis({ devices }: PredictiveAnalysisProps) {
+function validatePredictions(devices: DeviceProfile[]): {
+  accurateCount: number;
+  inaccurateCount: number;
+  pendingCount: number;
+  totalValidated: number;
+  averageError: number;
+  validationsByDevice: Map<string, { accurate: number; inaccurate: number; avgError: number }>;
+  recentValidations: Array<PredictionRecord & { deviceName: string; deviceEmoji: string }>;
+} {
+  let accurateCount = 0;
+  let inaccurateCount = 0;
+  let pendingCount = 0;
+  let totalErrorMinutes = 0;
+  const validationsByDevice = new Map<string, { accurate: number; inaccurate: number; avgError: number }>();
+  const recentValidations: Array<PredictionRecord & { deviceName: string; deviceEmoji: string }> = [];
+
+  devices.forEach(device => {
+    const predictions = device.predictionRecords || [];
+    const deviceStats = { accurate: 0, inaccurate: 0, avgError: 0, totalError: 0 };
+
+    predictions.forEach(pred => {
+      if (pred.actualTimestamp !== undefined && pred.wasAccurate !== undefined) {
+        if (pred.wasAccurate) {
+          accurateCount++;
+          deviceStats.accurate++;
+        } else {
+          inaccurateCount++;
+          deviceStats.inaccurate++;
+        }
+        
+        if (pred.timeErrorMinutes !== undefined) {
+          totalErrorMinutes += Math.abs(pred.timeErrorMinutes);
+          deviceStats.totalError += Math.abs(pred.timeErrorMinutes);
+        }
+
+        recentValidations.push({
+          ...pred,
+          deviceName: device.customName,
+          deviceEmoji: device.emoji,
+        });
+      } else if (pred.predictedTimestamp > Date.now()) {
+        pendingCount++;
+      }
+    });
+
+    if (deviceStats.accurate + deviceStats.inaccurate > 0) {
+      deviceStats.avgError = deviceStats.totalError / (deviceStats.accurate + deviceStats.inaccurate);
+      validationsByDevice.set(device.id, deviceStats);
+    }
+  });
+
+  const totalValidated = accurateCount + inaccurateCount;
+  const averageError = totalValidated > 0 ? totalErrorMinutes / totalValidated : 0;
+
+  recentValidations.sort((a, b) => (b.actualTimestamp || 0) - (a.actualTimestamp || 0));
+
+  return {
+    accurateCount,
+    inaccurateCount,
+    pendingCount,
+    totalValidated,
+    averageError,
+    validationsByDevice,
+    recentValidations: recentValidations.slice(0, 10),
+  };
+}
+
+export function PredictiveAnalysis({ devices, onSavePredictions }: PredictiveAnalysisProps) {
   const [confidenceThreshold, setConfidenceThreshold] = useState(0);
+
+  const validationResults = useMemo(() => validatePredictions(devices), [devices]);
 
   const confidenceTrend = useMemo(() => {
     return calculateConfidenceTrend(devices);
@@ -508,6 +581,176 @@ export function PredictiveAnalysis({ devices }: PredictiveAnalysisProps) {
           </p>
         </div>
       </Card>
+
+      {validationResults.totalValidated > 0 && (
+        <Card className="p-6 bg-card border-2">
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Target className="w-6 h-6 text-accent" weight="fill" />
+                <div>
+                  <h3 className="text-lg font-heading font-semibold">Prediction Accuracy Validation</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Real-world performance tracking: comparing predictions to actual detection times
+                  </p>
+                </div>
+              </div>
+              <Badge variant="default" className="text-lg px-4 py-2">
+                {validationResults.totalValidated > 0
+                  ? `${((validationResults.accurateCount / validationResults.totalValidated) * 100).toFixed(1)}%`
+                  : 'N/A'}{' '}
+                Accurate
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card className="p-4 border-l-4 border-l-green-500">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1">
+                    <p className="text-sm text-muted-foreground mb-1">Accurate Predictions</p>
+                    <p className="text-3xl font-heading font-bold text-green-600">{validationResults.accurateCount}</p>
+                  </div>
+                  <CheckCircle className="w-8 h-8 text-green-500" weight="fill" />
+                </div>
+                <p className="text-xs text-muted-foreground">Within acceptable time window</p>
+              </Card>
+
+              <Card className="p-4 border-l-4 border-l-red-500">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1">
+                    <p className="text-sm text-muted-foreground mb-1">Inaccurate Predictions</p>
+                    <p className="text-3xl font-heading font-bold text-red-600">{validationResults.inaccurateCount}</p>
+                  </div>
+                  <XCircle className="w-8 h-8 text-red-500" weight="fill" />
+                </div>
+                <p className="text-xs text-muted-foreground">Outside expected time window</p>
+              </Card>
+
+              <Card className="p-4 border-l-4 border-l-yellow-500">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1">
+                    <p className="text-sm text-muted-foreground mb-1">Pending Validation</p>
+                    <p className="text-3xl font-heading font-bold text-yellow-600">{validationResults.pendingCount}</p>
+                  </div>
+                  <MinusCircle className="w-8 h-8 text-yellow-500" weight="fill" />
+                </div>
+                <p className="text-xs text-muted-foreground">Awaiting future detection</p>
+              </Card>
+
+              <Card className="p-4 border-l-4 border-l-primary">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1">
+                    <p className="text-sm text-muted-foreground mb-1">Avg Time Error</p>
+                    <p className="text-3xl font-heading font-bold text-primary">
+                      {validationResults.averageError.toFixed(0)}m
+                    </p>
+                  </div>
+                  <Clock className="w-8 h-8 text-primary" weight="fill" />
+                </div>
+                <p className="text-xs text-muted-foreground">Mean absolute error</p>
+              </Card>
+            </div>
+
+            {validationResults.recentValidations.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-heading font-semibold text-sm">Recent Validation Results</h4>
+                  <span className="text-xs text-muted-foreground">Last 10 predictions</span>
+                </div>
+
+                <div className="space-y-2">
+                  {validationResults.recentValidations.map((validation) => {
+                    const predictedTime = new Date(validation.predictedTimestamp);
+                    const actualTime = validation.actualTimestamp ? new Date(validation.actualTimestamp) : null;
+                    const errorHours = validation.timeErrorMinutes ? Math.floor(Math.abs(validation.timeErrorMinutes) / 60) : 0;
+                    const errorMins = validation.timeErrorMinutes ? Math.abs(validation.timeErrorMinutes) % 60 : 0;
+
+                    return (
+                      <Card
+                        key={validation.id}
+                        className={cn(
+                          'p-3 border-l-4',
+                          validation.wasAccurate ? 'border-l-green-500 bg-green-500/5' : 'border-l-red-500 bg-red-500/5'
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-3 flex-1">
+                            <div className="text-xl">{validation.deviceEmoji}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-medium text-sm">{validation.deviceName}</span>
+                                {validation.wasAccurate ? (
+                                  <Badge variant="default" className="bg-green-600 text-white text-xs">
+                                    <CheckCircle className="w-3 h-3 mr-1" weight="fill" />
+                                    Accurate
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="default" className="bg-red-600 text-white text-xs">
+                                    <XCircle className="w-3 h-3 mr-1" weight="fill" />
+                                    Missed
+                                  </Badge>
+                                )}
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-muted-foreground">
+                                <div>
+                                  <span className="font-medium">Predicted:</span>{' '}
+                                  {predictedTime.toLocaleString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                  })}
+                                </div>
+                                {actualTime && (
+                                  <div>
+                                    <span className="font-medium">Actual:</span>{' '}
+                                    {actualTime.toLocaleString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      hour: 'numeric',
+                                      minute: '2-digit',
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+
+                              {validation.timeErrorMinutes !== undefined && (
+                                <div className="mt-1 text-xs">
+                                  <span className="font-medium">Error:</span>{' '}
+                                  {errorHours > 0 && `${errorHours}h `}
+                                  {errorMins}m{' '}
+                                  <span className="text-muted-foreground">
+                                    ({validation.timeErrorMinutes > 0 ? 'late' : 'early'})
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <Badge variant="outline" className="text-xs flex-shrink-0">
+                            {(validation.confidence * 100).toFixed(0)}% conf
+                          </Badge>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="pt-4 border-t border-border">
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                <strong className="text-foreground">How validation works:</strong> When the system makes a prediction, 
+                it's automatically compared against actual detection times when devices are scanned. A prediction is 
+                marked as "accurate" if the device is detected within ±2 hours of the predicted time. This continuous 
+                validation helps refine the prediction algorithms and provides transparency about real-world performance.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
 
       {confidenceTrend.length > 0 && (
         <Card className="p-6 bg-card">

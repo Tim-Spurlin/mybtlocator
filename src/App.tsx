@@ -16,7 +16,7 @@ import { HeatmapView } from '@/components/HeatmapView';
 import { PredictiveAnalysis } from '@/components/PredictiveAnalysis';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import { toast } from 'sonner';
-import type { DeviceProfile, LocationHistoryEntry } from '@/lib/types';
+import type { DeviceProfile, LocationHistoryEntry, PredictionRecord } from '@/lib/types';
 import { DEVICE_TYPES, MARKER_COLORS } from '@/lib/types';
 import { isBluetoothSupported, requestBluetoothDevice, estimateDistance } from '@/lib/bluetooth';
 import { getCurrentLocation } from '@/lib/geolocation';
@@ -30,6 +30,20 @@ L.Icon.Default.mergeOptions({
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
+
+function validatePrediction(prediction: PredictionRecord, actualTimestamp: number): PredictionRecord {
+  const ACCURACY_WINDOW_MS = 2 * 60 * 60 * 1000;
+  const timeDiff = actualTimestamp - prediction.predictedTimestamp;
+  const timeErrorMinutes = Math.round(timeDiff / (60 * 1000));
+  const isAccurate = Math.abs(timeDiff) <= ACCURACY_WINDOW_MS;
+
+  return {
+    ...prediction,
+    actualTimestamp,
+    wasAccurate: isAccurate,
+    timeErrorMinutes,
+  };
+}
 
 function App() {
   const [devices, setDevices] = useKV<DeviceProfile[]>('devices', []);
@@ -94,6 +108,13 @@ function App() {
                 
                 const updatedHistory = [...(d.locationHistory || []), newHistoryEntry];
                 
+                const validatedPredictions = (d.predictionRecords || []).map(pred => {
+                  if (pred.actualTimestamp === undefined && pred.predictedTimestamp < timestamp) {
+                    return validatePrediction(pred, timestamp);
+                  }
+                  return pred;
+                });
+                
                 return {
                   ...d,
                   lastLat: location?.latitude ?? d.lastLat,
@@ -102,6 +123,7 @@ function App() {
                   rssi: result.rssi,
                   isNearby: true,
                   locationHistory: updatedHistory,
+                  predictionRecords: validatedPredictions,
                 };
               }
               return d;
