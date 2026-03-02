@@ -1,8 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
+import { Slider } from '@/components/ui/slider';
+import { Label } from '@/components/ui/label';
 import { 
   Lightning, 
   Clock, 
@@ -11,7 +14,8 @@ import {
   Brain,
   Calendar,
   Target,
-  Warning
+  Warning,
+  Sliders
 } from '@phosphor-icons/react';
 import type { DeviceProfile, LocationHistoryEntry } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -247,7 +251,9 @@ function predictNextDetection(
 }
 
 export function PredictiveAnalysis({ devices }: PredictiveAnalysisProps) {
-  const predictions = useMemo<DevicePrediction[]>(() => {
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0);
+
+  const allPredictions = useMemo<DevicePrediction[]>(() => {
     return devices
       .filter(d => d.locationHistory && d.locationHistory.length >= 3)
       .map(device => {
@@ -304,7 +310,19 @@ export function PredictiveAnalysis({ devices }: PredictiveAnalysisProps) {
       });
   }, [devices]);
 
-  if (predictions.length === 0) {
+  const predictions = useMemo(() => {
+    return allPredictions.filter(p => {
+      const maxConfidence = Math.max(
+        p.patternConfidence,
+        p.predictedNextDetection?.confidence || 0,
+        ...p.nextLikelyTimes.map(t => t.confidence),
+        ...p.likelyLocations.map(l => l.confidence)
+      );
+      return maxConfidence >= confidenceThreshold;
+    });
+  }, [allPredictions, confidenceThreshold]);
+
+  if (allPredictions.length === 0) {
     return (
       <div className="text-center py-16">
         <Brain className="w-16 h-16 mx-auto mb-4 text-muted-foreground" weight="duotone" />
@@ -322,7 +340,7 @@ export function PredictiveAnalysis({ devices }: PredictiveAnalysisProps) {
     <div className="space-y-6">
       <div className="flex items-center gap-3 mb-2">
         <Lightning className="w-6 h-6 text-primary" weight="fill" />
-        <div>
+        <div className="flex-1">
           <h2 className="text-2xl font-heading font-bold">Predictive Analysis</h2>
           <p className="text-sm text-muted-foreground">
             AI-powered predictions based on historical detection patterns
@@ -330,7 +348,81 @@ export function PredictiveAnalysis({ devices }: PredictiveAnalysisProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <Card className="p-6 bg-card border-2">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sliders className="w-5 h-5 text-primary" weight="fill" />
+              <Label htmlFor="confidence-threshold" className="text-base font-heading font-semibold">
+                Confidence Threshold
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-lg font-mono px-3 py-1">
+                {Math.round(confidenceThreshold * 100)}%
+              </Badge>
+              {confidenceThreshold > 0 && (
+                <Badge variant="outline" className="text-xs">
+                  {predictions.length} of {allPredictions.length} shown
+                </Badge>
+              )}
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <Slider
+              id="confidence-threshold"
+              value={[confidenceThreshold * 100]}
+              onValueChange={(values) => setConfidenceThreshold(values[0] / 100)}
+              min={0}
+              max={95}
+              step={5}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>All Predictions</span>
+              <span>High Confidence Only (≥{Math.round(confidenceThreshold * 100)}%)</span>
+            </div>
+          </div>
+
+          <p className="text-sm text-muted-foreground mt-2">
+            Filter predictions by minimum confidence level. Higher thresholds show only the most reliable predictions.
+          </p>
+        </div>
+      </Card>
+
+      {predictions.length === 0 && allPredictions.length > 0 ? (
+        <div className="text-center py-16">
+          <Warning className="w-16 h-16 mx-auto mb-4 text-yellow-500" weight="duotone" />
+          <h3 className="text-xl font-heading font-semibold mb-2">
+            No Predictions Meet Threshold
+          </h3>
+          <p className="text-muted-foreground max-w-md mx-auto mb-4">
+            No predictions have confidence levels at or above {Math.round(confidenceThreshold * 100)}%. 
+            Lower the threshold to see more predictions.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => setConfidenceThreshold(0)}
+            className="gap-2"
+          >
+            <Sliders className="w-4 h-4" weight="fill" />
+            Reset Filter
+          </Button>
+        </div>
+      ) : predictions.length === 0 ? (
+        <div className="text-center py-16">
+          <Brain className="w-16 h-16 mx-auto mb-4 text-muted-foreground" weight="duotone" />
+          <h3 className="text-xl font-heading font-semibold mb-2">
+            No Predictions Available
+          </h3>
+          <p className="text-muted-foreground max-w-md mx-auto">
+            Keep scanning devices to build prediction data.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="p-6 border-l-4 border-l-primary">
           <div className="flex items-start justify-between mb-4">
             <div>
@@ -566,6 +658,8 @@ export function PredictiveAnalysis({ devices }: PredictiveAnalysisProps) {
           );
         })}
       </div>
+        </>
+      )}
     </div>
   );
 }
