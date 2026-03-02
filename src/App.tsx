@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useKV } from '@github/spark/hooks';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Bluetooth, MapTrifold, Disc, Pencil, Trash, ClockCounterClockwise } from '@phosphor-icons/react';
 import { DeviceCard } from '@/components/DeviceCard';
 import { HistoryTimeline } from '@/components/HistoryTimeline';
+import { HistoryFilters, type HistoryFilterState } from '@/components/HistoryFilters';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import { toast } from 'sonner';
 import type { DeviceProfile, LocationHistoryEntry } from '@/lib/types';
@@ -46,6 +47,12 @@ function App() {
     color: MARKER_COLORS[0].value,
     emoji: '📱',
     notes: '',
+  });
+
+  const [historyFilters, setHistoryFilters] = useState<HistoryFilterState>({
+    deviceTypes: [],
+    dateFrom: undefined,
+    dateTo: undefined,
   });
 
   useEffect(() => {
@@ -177,6 +184,62 @@ function App() {
     if (a.rssi && b.rssi) return b.rssi - a.rssi;
     return (b.lastSeen || 0) - (a.lastSeen || 0);
   });
+
+  const filteredDevices = useMemo(() => {
+    let filtered = [...(devices || [])];
+
+    if (historyFilters.deviceTypes.length > 0) {
+      filtered = filtered.filter(device => 
+        historyFilters.deviceTypes.includes(device.type)
+      );
+    }
+
+    if (historyFilters.dateFrom || historyFilters.dateTo) {
+      filtered = filtered.map(device => {
+        if (!device.locationHistory || device.locationHistory.length === 0) {
+          return { ...device, locationHistory: [] };
+        }
+
+        const filteredHistory = device.locationHistory.filter(entry => {
+          const entryDate = new Date(entry.timestamp);
+          entryDate.setHours(0, 0, 0, 0);
+          
+          if (historyFilters.dateFrom && historyFilters.dateTo) {
+            const fromDate = new Date(historyFilters.dateFrom);
+            fromDate.setHours(0, 0, 0, 0);
+            const toDate = new Date(historyFilters.dateTo);
+            toDate.setHours(23, 59, 59, 999);
+            return entry.timestamp >= fromDate.getTime() && entry.timestamp <= toDate.getTime();
+          } else if (historyFilters.dateFrom) {
+            const fromDate = new Date(historyFilters.dateFrom);
+            fromDate.setHours(0, 0, 0, 0);
+            return entry.timestamp >= fromDate.getTime();
+          } else if (historyFilters.dateTo) {
+            const toDate = new Date(historyFilters.dateTo);
+            toDate.setHours(23, 59, 59, 999);
+            return entry.timestamp <= toDate.getTime();
+          }
+          return true;
+        });
+
+        return { ...device, locationHistory: filteredHistory };
+      });
+    }
+
+    return filtered.filter(device => 
+      device.locationHistory && device.locationHistory.length > 0
+    );
+  }, [devices, historyFilters]);
+
+  const availableDeviceTypes = useMemo(() => {
+    const types = new Set<string>();
+    (devices || []).forEach(device => {
+      if (device.locationHistory && device.locationHistory.length > 0) {
+        types.add(device.type);
+      }
+    });
+    return Array.from(types);
+  }, [devices]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -364,61 +427,82 @@ function App() {
                       Device Location History
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      {(devices || []).reduce((sum, d) => sum + (d.locationHistory?.length || 0), 0)} total records
+                      {filteredDevices.reduce((sum, d) => sum + (d.locationHistory?.length || 0), 0)} records shown
+                      {(historyFilters.deviceTypes.length > 0 || historyFilters.dateFrom || historyFilters.dateTo) && 
+                        ` of ${(devices || []).reduce((sum, d) => sum + (d.locationHistory?.length || 0), 0)} total`
+                      }
                     </p>
                   </div>
+
+                  <HistoryFilters
+                    filters={historyFilters}
+                    onFiltersChange={setHistoryFilters}
+                    deviceTypeOptions={availableDeviceTypes}
+                  />
                   
-                  <div className="grid grid-cols-1 gap-6">
-                    {(devices || [])
-                      .filter(device => device.locationHistory && device.locationHistory.length > 0)
-                      .sort((a, b) => {
-                        const aLastSeen = a.locationHistory?.[a.locationHistory.length - 1]?.timestamp || 0;
-                        const bLastSeen = b.locationHistory?.[b.locationHistory.length - 1]?.timestamp || 0;
-                        return bLastSeen - aLastSeen;
-                      })
-                      .map(device => (
-                        <div key={device.id} className="space-y-3">
-                          <div className="flex items-center gap-3 pb-2 border-b border-border">
-                            <div 
-                              className="w-10 h-10 rounded-full flex items-center justify-center text-xl flex-shrink-0"
-                              style={{ backgroundColor: device.color }}
-                            >
-                              {device.emoji}
+                  {filteredDevices.length > 0 ? (
+                    <div className="grid grid-cols-1 gap-6">
+                      {filteredDevices
+                        .sort((a, b) => {
+                          const aLastSeen = a.locationHistory?.[a.locationHistory.length - 1]?.timestamp || 0;
+                          const bLastSeen = b.locationHistory?.[b.locationHistory.length - 1]?.timestamp || 0;
+                          return bLastSeen - aLastSeen;
+                        })
+                        .map(device => (
+                          <div key={device.id} className="space-y-3">
+                            <div className="flex items-center gap-3 pb-2 border-b border-border">
+                              <div 
+                                className="w-10 h-10 rounded-full flex items-center justify-center text-xl flex-shrink-0"
+                                style={{ backgroundColor: device.color }}
+                              >
+                                {device.emoji}
+                              </div>
+                              <div className="flex-1">
+                                <h4 className="font-heading font-semibold text-base">
+                                  {device.customName}
+                                </h4>
+                                <p className="text-xs text-muted-foreground font-mono">
+                                  {device.macAddress}
+                                </p>
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEditDevice(device)}
+                                className="gap-2"
+                              >
+                                <Pencil className="w-3.5 h-3.5" weight="fill" />
+                                Edit
+                              </Button>
                             </div>
-                            <div className="flex-1">
-                              <h4 className="font-heading font-semibold text-base">
-                                {device.customName}
-                              </h4>
-                              <p className="text-xs text-muted-foreground font-mono">
-                                {device.macAddress}
-                              </p>
-                            </div>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleEditDevice(device)}
-                              className="gap-2"
-                            >
-                              <Pencil className="w-3.5 h-3.5" weight="fill" />
-                              Edit
-                            </Button>
+                            
+                            <HistoryTimeline
+                              history={device.locationHistory || []}
+                              deviceColor={device.color}
+                              deviceEmoji={device.emoji}
+                            />
                           </div>
-                          
-                          <HistoryTimeline
-                            history={device.locationHistory || []}
-                            deviceColor={device.color}
-                            deviceEmoji={device.emoji}
-                          />
-                        </div>
-                      ))}
-                  </div>
-                  
-                  {(devices || []).filter(d => !d.locationHistory || d.locationHistory.length === 0).length > 0 && (
-                    <div className="mt-8 p-6 rounded-lg bg-muted/30 border border-border">
-                      <p className="text-sm text-muted-foreground text-center">
-                        {(devices || []).filter(d => !d.locationHistory || d.locationHistory.length === 0).length} device(s) 
-                        have no history yet. Scan devices to start tracking their locations.
+                        ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-16">
+                      <ClockCounterClockwise className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" weight="duotone" />
+                      <h3 className="text-xl font-heading font-semibold mb-2">
+                        No records match your filters
+                      </h3>
+                      <p className="text-muted-foreground mb-4">
+                        Try adjusting your filter criteria to see more results
                       </p>
+                      <Button
+                        variant="outline"
+                        onClick={() => setHistoryFilters({
+                          deviceTypes: [],
+                          dateFrom: undefined,
+                          dateTo: undefined,
+                        })}
+                      >
+                        Clear Filters
+                      </Button>
                     </div>
                   )}
                 </div>
