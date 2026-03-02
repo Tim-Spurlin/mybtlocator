@@ -47,6 +47,13 @@ This app combines multiple sophisticated features: Web Bluetooth API integration
 - Progression: Device detected → Capture current GPS → Store timestamp + location + RSSI in history array → Update "last seen" display → Display in chronological timeline grouped by date
 - Success criteria: Timestamps are accurate, locations persist across sessions, history shows chronological entries with full details including signal strength and distance estimates
 
+**Location Heatmap Visualization**
+- Functionality: Generate visual heatmap overlay on interactive map showing device detection density patterns across locations
+- Purpose: Identify hotspots where devices are most frequently detected, reveal usage patterns, and visualize tracking coverage
+- Trigger: User switches to Heatmap view tab
+- Progression: Open heatmap view → Load all location history data → Calculate density distribution → Render color-gradient heatmap layer → Adjust radius/blur/intensity controls → Toggle between all devices or single device view
+- Success criteria: Heatmap accurately reflects detection frequency with blue (low) to red (high) gradient, controls update visualization in real-time, performance remains smooth with hundreds of data points
+
 ## Edge Case Handling
 
 - **Bluetooth Permission Denied** - Show clear message explaining Web Bluetooth requirements with retry button
@@ -93,7 +100,7 @@ Animations should feel precise and purposeful - subtle scanning pulses, smooth t
 ## Component Selection
 
 - **Components**: 
-  - Tabs (view switching: Devices/Map/Radar)
+  - Tabs (view switching: Devices/Map/Heatmap/Radar/History/Statistics)
   - Card (device profile containers with hover states)
   - Button (scan controls, profile actions - modified with signal pulse animation)
   - Dialog (device profile editor with full-screen overlay)
@@ -104,10 +111,14 @@ Animations should feel precise and purposeful - subtle scanning pulses, smooth t
   - Avatar (device icons/emojis with custom color backgrounds)
   - Sheet (slide-up device details on mobile)
   - Tooltip (RSSI explanations, distance calculation info)
+  - Slider (heatmap control adjustments)
+  - Switch (heatmap device filtering)
+  - Select (device selection dropdown)
   
 - **Customizations**: 
   - Custom signal strength radial visualization (Canvas-based)
   - Interactive map component using Leaflet.js
+  - Heatmap layer using leaflet.heat plugin with custom gradient
   - Live scanning pulse animation overlay
   - Custom color picker for device markers
   - RSSI history sparkline graphs
@@ -120,13 +131,19 @@ Animations should feel precise and purposeful - subtle scanning pulses, smooth t
 - **Icon Selection**: 
   - Bluetooth (scanning/connection status)
   - MapPin (location markers)
-  - Crosshair (current location)
+  - MapTrifold (map view)
+  - Flame (heatmap visualization)
+  - Crosshair (current location, map recentering)
   - Signal (RSSI strength)
   - Pencil (edit profile)
   - Plus (add device)
   - Clock (last seen timestamp)
+  - ClockCounterClockwise (history view)
   - Circle (proximity indicator)
-  - Radar (live scanning view)
+  - Disc (radar view)
+  - ChartBar (statistics view)
+  - Trophy (top devices)
+  - TrendUp (statistics metrics)
   
 - **Spacing**: 
   - Page padding: p-6 (24px)
