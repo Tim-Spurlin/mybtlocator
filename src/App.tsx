@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Bluetooth, MapTrifold, Disc, Plus, Pencil, Trash } from '@phosphor-icons/react';
+import { Bluetooth, MapTrifold, Disc, Pencil, Trash } from '@phosphor-icons/react';
 import { DeviceCard } from '@/components/DeviceCard';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import { toast } from 'sonner';
@@ -70,7 +70,7 @@ function App() {
         
         if (existingDevice) {
           setDevices((currentDevices) =>
-            currentDevices.map(d =>
+            (currentDevices || []).map(d =>
               d.id === result.id
                 ? {
                     ...d,
@@ -99,7 +99,7 @@ function App() {
             rssi: result.rssi,
             isNearby: true,
           };
-          setDevices((currentDevices) => [...currentDevices, newDevice]);
+          setDevices((currentDevices) => [...(currentDevices || []), newDevice]);
           toast.success(`Found new device: ${result.name}`);
         }
       }
@@ -128,7 +128,7 @@ function App() {
     if (!editingDevice) return;
 
     setDevices((currentDevices) =>
-      currentDevices.map(d =>
+      (currentDevices || []).map(d =>
         d.id === editingDevice.id
           ? { ...d, ...formData }
           : d
@@ -141,7 +141,7 @@ function App() {
   };
 
   const handleDeleteDevice = (deviceId: string) => {
-    setDevices((currentDevices) => currentDevices.filter(d => d.id !== deviceId));
+    setDevices((currentDevices) => (currentDevices || []).filter(d => d.id !== deviceId));
     toast.success('Device removed');
     setShowEditor(false);
     setEditingDevice(null);

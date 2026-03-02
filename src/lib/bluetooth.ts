@@ -6,6 +6,10 @@ export function isBluetoothSupported(): boolean {
 
 export async function requestBluetoothDevice(): Promise<ScanResult | null> {
   try {
+    if (!navigator.bluetooth) {
+      throw new Error('Bluetooth API not available');
+    }
+
     const device = await navigator.bluetooth.requestDevice({
       acceptAllDevices: true,
       optionalServices: ['battery_service', 'device_information']
