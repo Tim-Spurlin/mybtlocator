@@ -14,6 +14,8 @@ import { HistoryFilters, type HistoryFilterState } from '@/components/HistoryFil
 import { StatisticsView } from '@/components/StatisticsView';
 import { HeatmapView } from '@/components/HeatmapView';
 import { PredictiveAnalysis } from '@/components/PredictiveAnalysis';
+import { NotificationSettingsCard } from '@/components/NotificationSettingsCard';
+import { usePredictionNotifications } from '@/hooks/use-prediction-notifications';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import { toast } from 'sonner';
 import type { DeviceProfile, LocationHistoryEntry, PredictionRecord } from '@/lib/types';
@@ -51,6 +53,12 @@ function App() {
   const [isScanning, setIsScanning] = useState(false);
   const [editingDevice, setEditingDevice] = useState<DeviceProfile | null>(null);
   const [showEditor, setShowEditor] = useState(false);
+
+  const {
+    settings: notificationSettings,
+    updateSettings: updateNotificationSettings,
+    clearNotificationHistory,
+  } = usePredictionNotifications(devices || []);
 
   const [formData, setFormData] = useState<{
     customName: string;
@@ -565,6 +573,11 @@ function App() {
             </TabsContent>
 
             <TabsContent value="predictions" className="space-y-4">
+              <NotificationSettingsCard
+                settings={notificationSettings}
+                onUpdateSettings={updateNotificationSettings}
+                onClearHistory={clearNotificationHistory}
+              />
               <PredictiveAnalysis devices={devices || []} />
             </TabsContent>
           </Tabs>
