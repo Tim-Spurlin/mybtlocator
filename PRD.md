@@ -41,11 +41,11 @@ This app combines multiple sophisticated features: Web Bluetooth API integration
 - Success criteria: Distance estimates are reasonable (1-50m range), visual indicators update in real-time
 
 **Device History & Last Seen Tracking**
-- Functionality: Record timestamp and location every time a device is detected, maintaining history log
-- Purpose: Track device movement patterns and show when/where it was last found
+- Functionality: Record timestamp and location every time a device is detected, maintaining comprehensive history log with timeline visualization
+- Purpose: Track device movement patterns, show when/where it was last found, and provide historical location data over time
 - Trigger: Automatic on each device detection
-- Progression: Device detected → Capture current GPS → Store timestamp + location → Update "last seen" display → Add to history log
-- Success criteria: Timestamps are accurate, locations persist, history shows chronological entries
+- Progression: Device detected → Capture current GPS → Store timestamp + location + RSSI in history array → Update "last seen" display → Display in chronological timeline grouped by date
+- Success criteria: Timestamps are accurate, locations persist across sessions, history shows chronological entries with full details including signal strength and distance estimates
 
 ## Edge Case Handling
 

@@ -1,3 +1,11 @@
+export interface LocationHistoryEntry {
+  timestamp: number;
+  latitude: number;
+  longitude: number;
+  rssi: number | null;
+  accuracy?: number;
+}
+
 export interface DeviceProfile {
   id: string;
   macAddress: string;
@@ -11,6 +19,7 @@ export interface DeviceProfile {
   lastSeen: number | null;
   rssi: number | null;
   isNearby: boolean;
+  locationHistory?: LocationHistoryEntry[];
 }
 
 export interface ScanResult {
