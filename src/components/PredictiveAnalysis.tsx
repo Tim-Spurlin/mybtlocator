@@ -15,10 +15,12 @@ import {
   Calendar,
   Target,
   Warning,
-  Sliders
+  Sliders,
+  ChartLine
 } from '@phosphor-icons/react';
 import type { DeviceProfile, LocationHistoryEntry } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 
 interface PredictiveAnalysisProps {
   devices: DeviceProfile[];
@@ -250,8 +252,124 @@ function predictNextDetection(
   return null;
 }
 
+interface ConfidenceTrendPoint {
+  dataPoints: number;
+  patternConfidence: number;
+  timeConfidence: number;
+  locationConfidence: number;
+  overallConfidence: number;
+  date: string;
+}
+
+function calculateConfidenceTrend(devices: DeviceProfile[]): ConfidenceTrendPoint[] {
+  const allHistory: Array<{ timestamp: number; deviceId: string }> = [];
+  
+  devices.forEach(device => {
+    if (device.locationHistory) {
+      device.locationHistory.forEach(entry => {
+        allHistory.push({
+          timestamp: entry.timestamp,
+          deviceId: device.id,
+        });
+      });
+    }
+  });
+
+  allHistory.sort((a, b) => a.timestamp - b.timestamp);
+
+  if (allHistory.length === 0) return [];
+
+  const trendPoints: ConfidenceTrendPoint[] = [];
+  const minDataPoints = 5;
+  const stepSize = Math.max(5, Math.floor(allHistory.length / 20));
+
+  for (let i = minDataPoints; i <= allHistory.length; i += stepSize) {
+    const historicalSlice = allHistory.slice(0, i);
+    const latestTimestamp = historicalSlice[historicalSlice.length - 1].timestamp;
+    
+    const deviceDataCounts: Record<string, number> = {};
+    historicalSlice.forEach(h => {
+      deviceDataCounts[h.deviceId] = (deviceDataCounts[h.deviceId] || 0) + 1;
+    });
+
+    let totalPatternConf = 0;
+    let totalTimeConf = 0;
+    let totalLocationConf = 0;
+    let deviceCount = 0;
+
+    devices.forEach(device => {
+      const deviceHistory = historicalSlice
+        .filter(h => h.deviceId === device.id)
+        .map(h => {
+          const fullEntry = device.locationHistory?.find(e => e.timestamp === h.timestamp);
+          return fullEntry!;
+        })
+        .filter(e => e);
+
+      if (deviceHistory.length >= 3) {
+        deviceCount++;
+
+        const { pattern, confidence: patternConf } = detectPattern(deviceHistory);
+        totalPatternConf += patternConf;
+
+        const timePatterns = analyzeTimePatterns(deviceHistory);
+        const timeConf = timePatterns.length > 0 
+          ? Math.min(0.95, timePatterns[0].count / Math.max(deviceHistory.length * 0.1, 1))
+          : 0;
+        totalTimeConf += timeConf;
+
+        const locationClusters = clusterLocations(deviceHistory);
+        const locationConf = locationClusters.length > 0
+          ? Math.min(0.95, locationClusters[0].count / deviceHistory.length)
+          : 0;
+        totalLocationConf += locationConf;
+      }
+    });
+
+    if (deviceCount > 0) {
+      const avgPatternConf = totalPatternConf / deviceCount;
+      const avgTimeConf = totalTimeConf / deviceCount;
+      const avgLocationConf = totalLocationConf / deviceCount;
+      const overallConf = (avgPatternConf + avgTimeConf + avgLocationConf) / 3;
+
+      trendPoints.push({
+        dataPoints: i,
+        patternConfidence: avgPatternConf,
+        timeConfidence: avgTimeConf,
+        locationConfidence: avgLocationConf,
+        overallConfidence: overallConf,
+        date: new Date(latestTimestamp).toLocaleDateString('en-US', { 
+          month: 'short', 
+          day: 'numeric' 
+        }),
+      });
+    }
+  }
+
+  if (trendPoints.length === 0 && allHistory.length >= minDataPoints) {
+    const latestTimestamp = allHistory[allHistory.length - 1].timestamp;
+    trendPoints.push({
+      dataPoints: allHistory.length,
+      patternConfidence: 0.3,
+      timeConfidence: 0.3,
+      locationConfidence: 0.3,
+      overallConfidence: 0.3,
+      date: new Date(latestTimestamp).toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric' 
+      }),
+    });
+  }
+
+  return trendPoints;
+}
+
 export function PredictiveAnalysis({ devices }: PredictiveAnalysisProps) {
   const [confidenceThreshold, setConfidenceThreshold] = useState(0);
+
+  const confidenceTrend = useMemo(() => {
+    return calculateConfidenceTrend(devices);
+  }, [devices]);
 
   const allPredictions = useMemo<DevicePrediction[]>(() => {
     return devices
@@ -390,6 +508,181 @@ export function PredictiveAnalysis({ devices }: PredictiveAnalysisProps) {
           </p>
         </div>
       </Card>
+
+      {confidenceTrend.length > 0 && (
+        <Card className="p-6 bg-card">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <ChartLine className="w-6 h-6 text-accent" weight="fill" />
+                <div>
+                  <h3 className="text-lg font-heading font-semibold">Prediction Accuracy Improvement</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Confidence trend showing how prediction accuracy improves with more data
+                  </p>
+                </div>
+              </div>
+              {confidenceTrend.length > 1 && (
+                <Badge 
+                  variant="default" 
+                  className={cn(
+                    'gap-1',
+                    confidenceTrend[confidenceTrend.length - 1].overallConfidence > 
+                    confidenceTrend[0].overallConfidence 
+                      ? 'bg-green-500' 
+                      : 'bg-yellow-500'
+                  )}
+                >
+                  <TrendUp className="w-3 h-3" weight="fill" />
+                  {((confidenceTrend[confidenceTrend.length - 1].overallConfidence - 
+                     confidenceTrend[0].overallConfidence) * 100).toFixed(1)}% improvement
+                </Badge>
+              )}
+            </div>
+
+            <div className="h-80 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={confidenceTrend}
+                  margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                >
+                  <defs>
+                    <linearGradient id="colorOverall" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="oklch(0.65 0.19 240)" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="oklch(0.65 0.19 240)" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorPattern" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="oklch(0.75 0.15 200)" stopOpacity={0.6}/>
+                      <stop offset="95%" stopColor="oklch(0.75 0.15 200)" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorTime" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="oklch(0.6 0.22 25)" stopOpacity={0.6}/>
+                      <stop offset="95%" stopColor="oklch(0.6 0.22 25)" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorLocation" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="oklch(0.7 0.15 150)" stopOpacity={0.6}/>
+                      <stop offset="95%" stopColor="oklch(0.7 0.15 150)" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.30 0.02 240)" opacity={0.3} />
+                  <XAxis 
+                    dataKey="dataPoints" 
+                    stroke="oklch(0.60 0.01 240)"
+                    fontSize={12}
+                    tickFormatter={(value) => `${value} pts`}
+                  />
+                  <YAxis 
+                    stroke="oklch(0.60 0.01 240)"
+                    fontSize={12}
+                    domain={[0, 1]}
+                    tickFormatter={(value) => `${(value * 100).toFixed(0)}%`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'oklch(0.20 0.02 240)',
+                      border: '1px solid oklch(0.30 0.02 240)',
+                      borderRadius: '8px',
+                      color: 'oklch(0.95 0.01 240)',
+                    }}
+                    formatter={(value: number) => `${(value * 100).toFixed(1)}%`}
+                    labelFormatter={(label) => `${label} data points`}
+                  />
+                  <Legend 
+                    wrapperStyle={{ 
+                      paddingTop: '20px',
+                      fontSize: '12px',
+                    }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="overallConfidence"
+                    stroke="oklch(0.65 0.19 240)"
+                    strokeWidth={3}
+                    fillOpacity={1}
+                    fill="url(#colorOverall)"
+                    name="Overall Confidence"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="patternConfidence"
+                    stroke="oklch(0.75 0.15 200)"
+                    strokeWidth={2}
+                    fillOpacity={1}
+                    fill="url(#colorPattern)"
+                    name="Pattern Detection"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="timeConfidence"
+                    stroke="oklch(0.6 0.22 25)"
+                    strokeWidth={2}
+                    fillOpacity={1}
+                    fill="url(#colorTime)"
+                    name="Time Prediction"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="locationConfidence"
+                    stroke="oklch(0.7 0.15 150)"
+                    strokeWidth={2}
+                    fillOpacity={1}
+                    fill="url(#colorLocation)"
+                    name="Location Clustering"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4 border-t border-border">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-primary" />
+                  <p className="text-xs font-medium text-muted-foreground">Overall</p>
+                </div>
+                <p className="text-2xl font-heading font-bold">
+                  {(confidenceTrend[confidenceTrend.length - 1].overallConfidence * 100).toFixed(0)}%
+                </p>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-accent" />
+                  <p className="text-xs font-medium text-muted-foreground">Pattern</p>
+                </div>
+                <p className="text-2xl font-heading font-bold">
+                  {(confidenceTrend[confidenceTrend.length - 1].patternConfidence * 100).toFixed(0)}%
+                </p>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'oklch(0.6 0.22 25)' }} />
+                  <p className="text-xs font-medium text-muted-foreground">Time</p>
+                </div>
+                <p className="text-2xl font-heading font-bold">
+                  {(confidenceTrend[confidenceTrend.length - 1].timeConfidence * 100).toFixed(0)}%
+                </p>
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'oklch(0.7 0.15 150)' }} />
+                  <p className="text-xs font-medium text-muted-foreground">Location</p>
+                </div>
+                <p className="text-2xl font-heading font-bold">
+                  {(confidenceTrend[confidenceTrend.length - 1].locationConfidence * 100).toFixed(0)}%
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-border">
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                <strong className="text-foreground">Analysis:</strong> This graph shows how prediction confidence 
+                improves as more detection data is collected. The overall confidence (primary line) is calculated from 
+                pattern detection accuracy, time prediction reliability, and location clustering precision. More data 
+                points lead to better pattern recognition and more accurate future predictions.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {predictions.length === 0 && allPredictions.length > 0 ? (
         <div className="text-center py-16">
