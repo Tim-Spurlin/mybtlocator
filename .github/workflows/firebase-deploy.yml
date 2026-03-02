@@ -16,3 +16,5 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MYBTLOCATOR_APP }}
           channelId: live
           projectId: mybtlocator-app
+        env:
+          FIREBASE_CLI_EXPERIMENTS: webframeworks
